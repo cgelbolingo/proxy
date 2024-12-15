@@ -8,6 +8,7 @@ import org.springframework.cloud.gateway.route.builder.RouteLocatorBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import reactor.core.publisher.Mono;
 
 import java.util.UUID;
 
@@ -29,7 +30,7 @@ public class RouteConfig {
         return builder.routes()
                 .route(p -> p
                         .path("/users/create")
-                        //For local testing
+//                        For local testing
 //                        .path("/post").and().method(HttpMethod.POST)
                         .filters(f -> f
                                 .addRequestHeader("X-Trace-Id", traceID.toString())
@@ -38,10 +39,41 @@ public class RouteConfig {
                         .uri(httpUri))
                 .route(p -> p
                         .path("/users/{id}")
-                        //For local testing
+//                        For local testing
 //                        .path("/get").and().method(HttpMethod.GET)
                         .filters(f -> f
                                         .addRequestHeader("X-Trace-Id", traceID.toString())
+                        )
+                        .uri(httpUri))
+
+                .route(p -> p
+                        .path("/users/{id}/update")
+//                        For local testing
+//                        .path("/put").and().method(HttpMethod.PUT)
+                        .filters(f -> f
+                                .modifyRequestBody(String.class, String.class, (exchange, body) -> {
+                                    exchange.getRequest().mutate()
+                                            .method(HttpMethod.POST);
+                                    //For local testing
+                                    exchange.getRequest().mutate().path("/post");
+                                    return Mono.just(body);
+                                })
+                                .addRequestHeader("X-Trace-Id", traceID.toString())
+                        )
+                        .uri(httpUri))
+                .route(p -> p
+                        .path("/users/{id}/delete")
+//                        For local testing
+//                        .path("/delete").and().method(HttpMethod.DELETE)
+                        .filters(f -> f
+                                .modifyRequestBody(String.class, String.class, (exchange, body) -> {
+                                    exchange.getRequest().mutate()
+                                            .method(HttpMethod.POST);
+                                    //For local testing
+                                    exchange.getRequest().mutate().path("/post");
+                                    return Mono.just(body);
+                                })
+                                .addRequestHeader("X-Trace-Id", traceID.toString())
                         )
                         .uri(httpUri))
                 .build();

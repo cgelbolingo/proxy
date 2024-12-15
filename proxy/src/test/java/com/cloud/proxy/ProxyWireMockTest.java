@@ -29,6 +29,7 @@ import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options
 
 import java.io.IOException;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
@@ -37,10 +38,13 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.notNull;
+import com.cloud.proxy.model.User;
 
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = {"backend=http://localhost:8888"})
+        properties = {"backend=http://localhost:8888",
+                "config.stopBubbling = true," +
+                "lombok.addLombokGeneratedAnnotation = true"})
 @WireMockTest(httpPort = 8888)
 public class ProxyWireMockTest {
     @Autowired
@@ -55,6 +59,7 @@ public class ProxyWireMockTest {
 
     private HttpClient httpClient;
 
+     private final String UUIDRegex = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
 
     @Rule
     public WireMockRule wm = new WireMockRule(options()
@@ -68,6 +73,11 @@ public class ProxyWireMockTest {
         wireMockServer.start();
 
         stubFor(post(urlEqualTo("/users/create"))  // Arbitrary URL
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withBody("Mocked Backend Response")));
+
+        stubFor(get(urlMatching("/users/" + UUIDRegex))  // Arbitrary URL
                 .willReturn(aResponse()
                         .withStatus(200)
                         .withBody("Mocked Backend Response")));
@@ -89,13 +99,30 @@ public class ProxyWireMockTest {
         });
     }
 
+    @Test
+    public void testRouting_create() throws InterruptedException {
+        printRoutes();
+        webTestClient.post()
+                .uri("/users/create")
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .bodyValue(
+                        User.builder()
+                                .id(UUID.randomUUID().toString())
+                                .email("johndoe@gmail.com")
+                                .firstName("John")
+                                .lastName("Doe")
+                                .build()
+                )
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(String.class).isEqualTo("Mocked Backend Response");
+    }
 
     @Test
-    public void testRoutingToArbitraryBackend() throws InterruptedException {
-        printRoutes();
-        // Test the gateway routing logic with an arbitrary URL
-        webTestClient.post()
-                .uri("/users/create") // Path to be routed by Spring Cloud Gateway
+    public void testRouting_get() throws InterruptedException {
+        String id = UUID.randomUUID().toString();
+        webTestClient.get()
+                .uri("/users/{id}", id) // Path to be routed by Spring Cloud Gateway
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody(String.class).isEqualTo("Mocked Backend Response"); // Verifying the mocked response
