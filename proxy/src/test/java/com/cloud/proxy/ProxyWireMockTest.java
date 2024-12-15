@@ -2,6 +2,7 @@ package com.cloud.proxy;
 
 
 //import com.github.tomakehurst.wiremock.client.WireMock;
+import com.cloud.proxy.config.RouteConfig;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.http.JvmProxyConfigurer;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.cloud.gateway.route.RouteLocator;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import wiremock.org.apache.hc.client5.http.classic.HttpClient;
 import wiremock.org.apache.hc.client5.http.classic.methods.HttpGet;
@@ -45,6 +47,7 @@ import com.cloud.proxy.model.User;
         properties = {"backend=http://localhost:8888",
                 "config.stopBubbling = true," +
                 "lombok.addLombokGeneratedAnnotation = true"})
+@Import(RouteConfig.class)
 @WireMockTest(httpPort = 8888)
 public class ProxyWireMockTest {
     @Autowired
@@ -53,49 +56,62 @@ public class ProxyWireMockTest {
     @Autowired
     private RouteLocator routeLocator;
 
+    /*
     private MockWebServer mockWebServer;
 
     private static WireMockServer wireMockServer;
 
     private HttpClient httpClient;
 
+     */
+
      private final String UUIDRegex = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
 
-    @Rule
-    public WireMockRule wm = new WireMockRule(options()
-            .dynamicPort()
-            .enableBrowserProxying(true)
-    );
+//    @Rule
+//    public WireMockRule wm = new WireMockRule(options()
+//            .dynamicPort()
+//            .enableBrowserProxying(true)
+//    );
 
     @BeforeEach
     public void setup() {
-        wireMockServer = new WireMockServer(options().port(9090));// Mock downstream service
-        wireMockServer.start();
+//        wireMockServer = new WireMockServer(options().port(9090));
+//        wireMockServer.start();
 
-        stubFor(post(urlEqualTo("/users/create"))  // Arbitrary URL
+        stubFor(post(urlEqualTo("/users/create"))
                 .willReturn(aResponse()
                         .withStatus(200)
                         .withBody("Mocked Backend Response")));
 
-        stubFor(get(urlMatching("/users/" + UUIDRegex))  // Arbitrary URL
+        stubFor(get(urlMatching("/users/" + UUIDRegex))
                 .willReturn(aResponse()
                         .withStatus(200)
                         .withBody("Mocked Backend Response")));
 
-        httpClient = HttpClientBuilder.create()
-                .useSystemProperties() // This must be enabled for auto proxy config
-                .build();
+        stubFor(post(urlMatching("/users/" + UUIDRegex + "/update"))
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withBody("Mocked Backend Response")));
+
+        stubFor(post(urlMatching("/users/" + UUIDRegex + "/delete"))
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withBody("Mocked Backend Response")));
+
     }
 
     @AfterEach
-    void tearDown() throws IOException {
-        wireMockServer.stop();
+    void tearDown() {
+//        wireMockServer.stop();
     }
 
     public void printRoutes() {
         routeLocator.getRoutes().subscribe(route -> {
             System.out.println("Route ID: " + route.getId());
             System.out.println("Route URI: " + route.getUri());
+            System.out.println("Route predicate: " + route.getPredicate());
+            System.out.println("Route filters: " + route.getFilters());
+            System.out.println("Route metadata: " + route.getMetadata());
         });
     }
 
@@ -119,13 +135,42 @@ public class ProxyWireMockTest {
     }
 
     @Test
-    public void testRouting_get() throws InterruptedException {
+    public void testRouting_get() {
         String id = UUID.randomUUID().toString();
         webTestClient.get()
-                .uri("/users/{id}", id) // Path to be routed by Spring Cloud Gateway
+                .uri("/users/{id}", id)
                 .exchange()
                 .expectStatus().isOk()
-                .expectBody(String.class).isEqualTo("Mocked Backend Response"); // Verifying the mocked response
+                .expectBody(String.class).isEqualTo("Mocked Backend Response");
+    }
+
+    @Test
+    public void testRouting_update() {
+        String id = UUID.randomUUID().toString();
+        webTestClient.put()
+                .uri("/users/{id}/update", id)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .bodyValue(
+                        User.builder()
+                                .id(UUID.randomUUID().toString())
+                                .email("johndoe@gmail.com")
+                                .firstName("John")
+                                .lastName("Doe")
+                                .build()
+                )
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(String.class).isEqualTo("Mocked Backend Response");
+    }
+
+    @Test
+    public void testRouting_delete() {
+        String id = UUID.randomUUID().toString();
+        webTestClient.delete()
+                .uri("/users/{id}/delete", id)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(String.class).isEqualTo("Mocked Backend Response");
     }
 
     /*
